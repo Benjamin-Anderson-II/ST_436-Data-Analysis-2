@@ -1,0 +1,123 @@
+---
+title: "436: Snow in the Cascades"
+author: Benjamin Anderson II
+format: pdf
+execute: 
+  echo: false
+---
+
+```{r}
+#| include: false
+library(tidyverse)
+library(knitr)
+```
+
+```{r}
+# Top of csv is messy, so it's skipped and column names are added manually
+
+col_names <- c("station_name", "year", "day", "jan", "feb", "mar", "apr",
+               "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+snow_water <- read.csv(
+    file = "data/report.csv", 
+    skip = 58, 
+    col.names = col_names
+  )
+```
+*To preface for the rest of the paper: snow water equivalent (swe) is the measure the depth of water that would theoretically result if the entire snowpack were melted instantaneously.*
+
+# 1
+**How much snow is there on Jan 1st? How do the two locations compare?**
+```{r}
+#| fig-cap: "Amount of Snow Water Equivalent on January 1st from 1992 to 2022"
+#| warning: false
+snow_water |>
+  filter(day == 1) |>
+  ggplot(mapping = aes(x = year, y = jan)) +
+  geom_line(aes(color = station_name)) +
+  labs(
+    x = "Year",
+    y = "SWE on January 1st (inches)",
+    color = "Station Name"
+  )
+```
+## Answer
+As is seen from the above graph, the two locations seem to generally follow the same trends with Hogg Pass always having more snow water equivalent than Santiam Junction. The two also seem to be approaching the same value in more recent years.
+
+# 2 
+**Is there any change in the yearly peak amount of snow over the period 1992-2022?**
+```{r}
+#| message: false
+#| fig-cap: "Maximum Snow Water Equivalent per Year by Station from 1992 to 2022"
+# Create the data to be graphed =============================
+# Reformat
+swe_by_month <- snow_water |>
+  pivot_longer(
+    cols = jan:dec, 
+    names_to = "month", 
+    values_to = "swe"
+  )
+
+# Can't work with absence of data
+# snow water by month (swbm)
+swbm_no_missing <- swe_by_month |>
+  filter(is.na(swe) == FALSE)
+
+# Water Year starts on Oct --------------------
+swbm_water_year <- swbm_no_missing |>
+  mutate(
+    water_year = ifelse(
+      match(month, tolower(month.abb)) < 10,
+      year-1, # if before Oct, water year hasn't started yet
+      year    # if after, it has
+    )
+  )
+
+# Finalize graphable data ---------------------
+swe_max_summary <- swbm_water_year |>
+  group_by(water_year, station_name) |>
+  summarise(max_swe = max(swe))
+
+# Graph the Data ============================================
+swe_max_summary |>
+  ggplot(mapping = aes(
+    x = water_year, 
+    y = max_swe
+  )) +
+  
+# Line Plot of data ---------------------
+  geom_line(aes(color = station_name)) +
+  labs(
+    x = "Year",
+    y = "Max SWE (inches)",
+    color = "Station Name"
+  ) +
+
+# Best fit line -------------------------
+  geom_smooth(
+    method = "lm",
+    se     = FALSE,
+    color  = "darkgrey"
+  )
+```
+## Answer
+The general trend seems to be a decline in the maximum snow water equivalent for each station. The best fit line provides a visual representation of this, showing gradual descent from ~34 inches to ~12 inches. 
+
+# 3
+**Which years were the most extreme?**
+```{r}
+#| tbl-cap: "Year with the Highest Snow Water Equivalent for Each Station"
+#| tbl-colwidths: [20,15,15]
+swe_max_summary |>
+  group_by(station_name) |>
+  arrange(desc(max_swe)) |>
+  filter(row_number()==1) |> # Only take the highest
+  rename(
+    Station.Name = station_name, 
+    Year = water_year, 
+    SWE = max_swe # Chose to keep the SWE
+  ) |>
+  relocate(Station.Name) |> # Aesthetics
+  kable()
+```
+## Answer
+The two most extreme years in terms of maximum snow water equivalent are 1998 for Hogg Pass and 2007 for Santiam Junction. The snow water equivalent values, measured in inches, recorded for those years are 68.5 and 38.4 respectively.
